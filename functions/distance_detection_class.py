@@ -8,9 +8,11 @@ import cv2
 import os
 
 from scipy.spatial import distance
+from datetime import datetime
 
 class videoStreaming(QThread):
     imagenfinal=pyqtSignal(QImage)
+    datosguardar=pyqtSignal(int,int,float,str)
 
 
 
@@ -47,10 +49,11 @@ class videoStreaming(QThread):
         return cajas, lista_confianza, ids_clases
 
 
-    def dibujar_cajas(self,imagen, cajas, lista_confianza, ids_clases, idxs, color):
+    def dibujar_cajas(self,imagen, cajas, lista_confianza, ids_clases, idxs, color,contador):
         resultados = []
         infractores = set()
-        
+        dist_promedio = 0.0
+        contador += 1
         if len(idxs) > 0:
             for i in idxs.flatten():
                 # extraer las coordenadas de las cajas
@@ -70,12 +73,12 @@ class videoStreaming(QThread):
                             if D[i,j] < 300 :
                                 infractores.add(i)
                                 infractores.add(j)
-                                print(i,j,D[i][j])
+                                dist_promedio += D[i][j]
+                                contador = 0
                 for (i, ( _, bbox, centroid)) in enumerate(resultados):
                     (x, y, x2, y2) = bbox
                     #(cX, cY) = centroid
                     if i in infractores:
-                        print(i)
                         color = (0,0,255)
                     else:
                         color = (0,255,0)
@@ -90,7 +93,9 @@ class videoStreaming(QThread):
             cv2.putText(imagen, "Personas: {0}".format(len(resultados)), (20, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,0,0), 2)
             cv2.putText(imagen, "Incumplidas: {0}".format(len(infractores)), (20, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 2)
             cv2.putText(imagen, "Cumplidas: {0}".format(len(resultados)-len(infractores)), (20, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 2)        
-        return imagen
+            if len(infractores) != 0:
+                dist_promedio = dist_promedio / len(infractores)
+        return imagen,len(resultados),len(infractores),dist_promedio, contador
 
 
     def prediccion(self,red, nombres_etiquetas, imagen, confianza, umbral):
@@ -147,6 +152,12 @@ class videoStreaming(QThread):
         video.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         video.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
+        #variables temporales
+        temp_personas = 0
+        temp_incumplidas = 0
+        temp_dist_promedio = 0.0
+        contador = 0
+        guardar = False
 
         #iniciar renderizado de video
         while video.isOpened():
@@ -154,13 +165,30 @@ class videoStreaming(QThread):
 
             cajas, confianzas, idclases, idxs = self.prediccion(red, nombres_etiquetas, imagen, confianza, umbral)
 
-            imagen = self.dibujar_cajas(imagen, cajas, confianzas, idclases, idxs, color)
+            imagen, _personas,_infractores,_dist_promedio,contador = self.dibujar_cajas(imagen, cajas, confianzas, idclases, idxs, color,contador)
             imagen = cv2.cvtColor(imagen, cv2.COLOR_BGR2RGB)
             imagen = cv2.flip(imagen,1)
             imagenaplanada= cv2.flip(imagen,1)
             qtImagen= QImage(imagenaplanada.data, imagenaplanada.shape[1], imagenaplanada.shape[0], QImage.Format_RGB888)
             img= qtImagen.scaled(1280,720,Qt.KeepAspectRatio)
             self.imagenfinal.emit(img)
+
+            if _infractores > temp_incumplidas:
+                temp_personas = _personas
+                temp_incumplidas = _infractores
+                temp_dist_promedio = _dist_promedio
+                fecha = str(datetime.now())
+                guardar = True
+            if contador == 15 and guardar:
+                #print(temp_personas,temp_incumplidas,temp_dist_promedio,fecha)
+                self.datosguardar.emit(temp_personas,temp_incumplidas,temp_dist_promedio,fecha)
+                
+                contador = 0
+                temp_dist_promedio = 0.0
+                temp_incumplidas = 0
+                temp_personas = 0
+                guardar = False
+                
 
 
             """cv2.imshow('Deteccion de personas con YOLOv3', imagen)
