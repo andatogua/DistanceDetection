@@ -3,6 +3,7 @@ from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 
+
 import numpy as np
 import cv2
 import os
@@ -102,7 +103,7 @@ class videoStreaming(QThread):
         alto, ancho = imagen.shape[:2]
         
         # crear blob desde la imagen
-        blob = cv2.dnn.blobFromImage(imagen, 1 / 255.0, (224, 224), swapRB=True, crop=False)
+        blob = cv2.dnn.blobFromImage(imagen, 1 / 255.0, (320, 320), swapRB=True, crop=False)
         red.setInput(blob)
         salidas = red.forward(nombres_etiquetas)
 
@@ -148,6 +149,8 @@ class videoStreaming(QThread):
 
         #inicializamos video
         video = cv2.VideoCapture(0)
+        
+        
         #redimiensionamos video
         video.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         video.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)

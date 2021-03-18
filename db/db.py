@@ -34,3 +34,32 @@ def guardar(incumplidos,personas,dist_promedio,fecha):
             return True
     else:
         print(q.lastError().text())
+
+def datosdia(dia):
+    datos = []
+    incum = 0
+    total = 0 
+    dist_prom = 0
+    n = 0
+    hora = ''
+    q = QSqlQuery()
+    if q.prepare("SELECT sum(incumplidos), sum(total), sum(dist_promedio), count(fecha),strftime('%H',fecha) FROM registro WHERE date(fecha)='" + dia + "' GROUP BY strftime('%H',fecha);"):
+        if q.exec():
+            while q.next():
+                incum = q.value(0)
+                total = q.value(1)
+                dist_prom = q.value(2)
+                n = q.value(3)
+                hora = q.value(4)
+                datos.append([incum,total,dist_prom,n,hora])
+    return datos
+
+def ultimadetdia(dia):
+    fecha = ''
+    q = QSqlQuery()
+    if q.prepare("SELECT fecha FROM registro WHERE date(fecha)='" + dia + "' ORDER BY fecha DESC LIMIT 1;"):
+        if q.exec():
+            while q.next():
+                fecha = q.value(0)
+    return fecha
+

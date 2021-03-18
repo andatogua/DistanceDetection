@@ -56,7 +56,7 @@ def dibujar_cajas(imagen, cajas, lista_confianza, ids_clases, idxs, color):
                 D = distance.cdist(centroides,centroides, metric='euclidean')
                 for i in range(0, D.shape[0]-1):
                     for j in range(i + 1, D.shape[1]):
-                        if D[i,j] < 750 :
+                        if D[i,j] < 100 :
                             infractores.add(i)
                             infractores.add(j)
                             print(i,j,D[i][j])
