@@ -2,8 +2,6 @@ import numpy as np
 import cv2
 import os
 
-from scipy.spatial import distance
-
 def extraer_cajas_confianzas_idsclases(salidas, confianza, ancho, alto):
     cajas = []
     lista_confianza = []
@@ -15,8 +13,9 @@ def extraer_cajas_confianzas_idsclases(salidas, confianza, ancho, alto):
             puntajes = deteccion[5:]
             id_clase = np.argmax(puntajes)
             conf = puntajes[id_clase]
+            
             # se muestra sólo si supera el nivel de confianza establecido
-            if conf > confianza and id_clase == 0:
+            if conf > confianza:
                 # redimensionar la caja que enmarcará a la persona
                 caja = deteccion[0:4] * np.array([ancho, alto, ancho, alto])
                 centroX, centroY, _ancho, _alto = caja.astype('int')
@@ -37,47 +36,18 @@ def extraer_cajas_confianzas_idsclases(salidas, confianza, ancho, alto):
     return cajas, lista_confianza, ids_clases
 
 
-def dibujar_cajas(imagen, cajas, lista_confianza, ids_clases, idxs, color):
-    resultados = []
-    infractores = set()
+def dibujar_cajas(imagen, cajas, lista_confianza, ids_clases, idxs, colores):
     if len(idxs) > 0:
         for i in idxs.flatten():
             # extraer las coordenadas de las cajas
             x, y = cajas[i][0], cajas[i][1]
             ancho, alto = cajas[i][2], cajas[i][3]
-            #posición de los pies
-            cx = x + (ancho/2)
-            cy = y + (alto)
-            # bloque añadido
-            r = (lista_confianza[i], (x, y, x + ancho, y + alto), (cx,cy))
-            resultados.append(r)
-            if len(resultados) >= 2:
-                centroides = np.array([r[2] for r in resultados])
-                D = distance.cdist(centroides,centroides, metric='euclidean')
-                for i in range(0, D.shape[0]-1):
-                    for j in range(i + 1, D.shape[1]):
-                        if D[i,j] < 270 :
-                            infractores.add(i)
-                            infractores.add(j)
-                            print(i,j,D[i][j])
-            for (i, ( _, bbox, centroid)) in enumerate(resultados):
-                (x, y, x2, y2) = bbox
-                #(cX, cY) = centroid
-                if i in infractores:
-                    color = (0,0,255)
-                else:
-                    color = (0,255,0)
-
-                #fin bloque añadido
-
-                #if etiquetas[ids_clases[i]] == 'person':
-                # dibujar la caja que enmarca a cada persona con su respectivo nivel de confianza
-                #color = [int(c) for c in colors[classIDs[i]]]
-                cv2.rectangle(imagen, (x, y), (x2,y2), color, 2)
-                texto = "{}: {:.1f}%".format('Persona', lista_confianza[i]*100)
-                cv2.putText(imagen, texto, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-
-                cv2.putText(imagen, "Personas: {0}".format(len(resultados)), (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            color = [int(c) for c in colores[ids_clases[i]]]
+            # dibujar la caja que enmarca a cada persona con su respectivo nivel de confianza
+            #color = [int(c) for c in colors[classIDs[i]]]
+            cv2.rectangle(imagen, (x, y), (x + ancho, y + alto), color, 2)
+            texto = "{}: {:.1f}%".format(etiquetas[ids_clases[i]], lista_confianza[i]*100)
+            cv2.putText(imagen, texto, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
     return imagen
 
@@ -104,7 +74,7 @@ def prediccion(red, nombres_etiquetas, imagen, confianza, umbral):
 etiquetas = open('../model/coco.names').read().strip().split('\n')
 
 #color verde por defecto para las personas
-color = (0,255,0)
+colores = np.random.randint(0, 255, size=(len(etiquetas), 3), dtype='uint8')
 
 #cargar pesos y configuración de YOLOv3
 red = cv2.dnn.readNetFromDarknet('../model/yolov3.cfg','../model/yolov3.weights')
@@ -139,7 +109,7 @@ while video.isOpened():
 
     cajas, confianzas, idclases, idxs = prediccion(red, nombres_etiquetas, imagen, confianza, umbral)
 
-    imagen = dibujar_cajas(imagen, cajas, confianzas, idclases, idxs, color)
+    imagen = dibujar_cajas(imagen, cajas, confianzas, idclases, idxs, colores)
 
     cv2.imshow('Deteccion de personas con YOLOv3', imagen)
     if cv2.waitKey(1) & 0xFF == ord('q'):

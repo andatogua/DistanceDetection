@@ -71,7 +71,7 @@ class videoStreaming(QThread):
                     D = distance.cdist(centroides,centroides, metric='euclidean')
                     for i in range(0, D.shape[0]-1):
                         for j in range(i + 1, D.shape[1]):
-                            if D[i,j] < 300 :
+                            if D[i,j] < 270 :
                                 infractores.add(i)
                                 infractores.add(j)
                                 dist_promedio += D[i][j]
@@ -148,7 +148,7 @@ class videoStreaming(QThread):
         
 
         #inicializamos video
-        video = cv2.VideoCapture(0)
+        video = cv2.VideoCapture(1)
         
         
         #redimiensionamos video

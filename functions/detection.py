@@ -57,7 +57,7 @@ def prediccion(red, nombres_etiquetas, imagen, confianza, umbral):
     alto, ancho = imagen.shape[:2]
     
     # crear blob desde la imagen
-    blob = cv2.dnn.blobFromImage(imagen, 1 / 255.0, (128, 128), swapRB=True, crop=False)
+    blob = cv2.dnn.blobFromImage(imagen, 1 / 255.0, (320, 320), swapRB=True, crop=False)
     red.setInput(blob)
     salidas = red.forward(nombres_etiquetas)
 
@@ -99,7 +99,7 @@ confianza = 0.8
 umbral = 0.3
 
 #inicializamos video
-video = cv2.VideoCapture(0)
+video = cv2.VideoCapture(1)
 #redimiensionamos video
 video.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
 video.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)

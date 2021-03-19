@@ -92,7 +92,7 @@
        <rect>
         <x>40</x>
         <y>110</y>
-        <width>321</width>
+        <width>341</width>
         <height>16</height>
        </rect>
       </property>
@@ -112,7 +112,7 @@
        <rect>
         <x>40</x>
         <y>380</y>
-        <width>321</width>
+        <width>371</width>
         <height>16</height>
        </rect>
       </property>
@@ -124,7 +124,7 @@
        </font>
       </property>
       <property name="text">
-       <string>Cumplimiento y distancia promedio por hora </string>
+       <string>% de Cumplimiento y aproximado de personas por hora </string>
       </property>
      </widget>
      <widget class="QWidget" name="layoutWidget">
