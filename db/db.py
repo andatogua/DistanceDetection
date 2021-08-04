@@ -63,3 +63,12 @@ def ultimadetdia(dia):
                 fecha = q.value(0)
     return fecha
 
+def totaldetinf():
+    infractores, detecciones = 0, 0
+    q = QSqlQuery()
+    if q.prepare("SELECT sum(incumplidos), count(incumplidos) FROM registro;"):
+        if q.exec():
+            while q.next():
+                infractores, detecciones = q.value(0),q.value(1)
+
+    return infractores, detecciones

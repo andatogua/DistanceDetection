@@ -1,3 +1,4 @@
+#importar módulos
 import sys
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
@@ -12,191 +13,155 @@ from scipy.spatial import distance
 from datetime import datetime
 
 class videoStreaming(QThread):
-    imagenfinal=pyqtSignal(QImage)
-    datosguardar=pyqtSignal(int,int,float,str)
+	imagenfinal=pyqtSignal(QImage)
+	datosguardar=pyqtSignal(int,int,float,str)
 
+	def dibujarcajas(self,idxs,cajas,confianzas,fotograma,contador):
 
+		resultados = [] #contiene la lista de mejores predicciones
+		infractores = set()
+		sumaDistanciaPromedio = 0.0
+		contador += 1
+		if len(idxs) > 0:
+			for i in idxs.flatten():
+				x , y, ancho, alto = cajas[i] #coordenadas de las cajas
+				#coordenadas de los pies
+				piesx = x + ancho/2
+				piesy = y + alto
+				resultados.append((confianzas[i],(x,y,x+ancho,y+alto),(piesx,piesy)))
+		#debe existir almenos 2  personas
+			if len(resultados) >= 2:
+				centroides = np.array([r[2] for r in resultados])
+				D = distance.cdist(centroides,centroides, metric='euclidean')
+				#método para leer sólo la mitad de la matriz cuadrada
+				for i in range(0,D.shape[0]-1):
+					for j in range(i+1,D.shape[1]):
+						if D[i,j] < 150: #370 es un valor referencia
+							infractores.add(i)
+							infractores.add(j)
+							sumaDistanciaPromedio += D[i,j]
+							contador = 0 #cuenta fotogramas si no hay detecciones
+			for (i,(c,cajon,_)) in enumerate(resultados): #i es el mismo indice tanto para D como para resultados
+				if i in infractores:					  #porque los centroides son obtenidos de ese arreglo
+					color = (0,0,255) #BGR
+				else:
+					color = (0,255,0) #BGR
+				x1,y1,x2,y2 = cajon #coordenadas para dibuhar caja
+				texto = "{}: {:.1f}%".format("Persona",c*100)
+				cv2.rectangle(fotograma,(x1,y1),(x2,y2),color, 1)
+				cv2.putText(fotograma,texto,(x1,y1-5),cv2.FONT_HERSHEY_SIMPLEX,	0.5,color,1)
+			cv2.putText(fotograma, "Personas: {0}".format(len(resultados)), (20, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,0,0), 2)
+			cv2.putText(fotograma, "Incumplidas: {0}".format(len(infractores)), (20, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 2)
+			cv2.putText(fotograma, "Cumplidas: {0}".format(len(resultados)-len(infractores)), (20, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 2)        
 
-    def extraer_cajas_confianzas_idsclases(self,salidas, confianza, ancho, alto):
-        cajas = []
-        lista_confianza = []
-        ids_clases = []
+			if len(infractores) != 0:
+				sumaDistanciaPromedio = sumaDistanciaPromedio /len(infractores)
+		return fotograma, len(resultados),len(infractores),sumaDistanciaPromedio, contador
 
-        for salida in salidas:
-            for deteccion in salida:            
-                # Extraer los puntajes, los id de las clases, y la confianza de la predicción
-                puntajes = deteccion[5:]
-                id_clase = np.argmax(puntajes)
-                conf = puntajes[id_clase]
-                # se muestra sólo si supera el nivel de confianza establecido
-                if conf > confianza and id_clase == 0:
-                    # redimensionar la caja que enmarcará a la persona
-                    caja = deteccion[0:4] * np.array([ancho, alto, ancho, alto])
-                    centroX, centroY, _ancho, _alto = caja.astype('int')
+	def deteccion(self,fotograma,red,capasRedimension,confianza,umbral):
 
-                    # obtener las coordenadas superior izquierda para dibujar el rectángulo
-                    x = int(centroX - (_ancho / 2))
-                    y = int(centroY - (_alto / 2))
+		alto,ancho = fotograma.shape[:2] #(640,480,3)
+		#capturamos el blob de la imagen
+		blob = cv2.dnn.blobFromImage(fotograma, 1/255, (224,224), swapRB=True, crop=False )
+		
+		red.setInput(blob)
+		salidas = red.forward(capasRedimension)
+		
+		cajas = []
+		confianzas = []
+		clases = []
 
-                    #las coordenadas se añaden a la lista de cajas
-                    cajas.append([x, y, int(_ancho), int(_alto)])
-                    
-                    #se añaden los niveles de confianza obtenidos
-                    lista_confianza.append(float(conf))
-                    
-                    #se añaden las identificaciones de las clases obtenidas
-                    ids_clases.append(id_clase)
+		for salida in salidas:
+			for deteccion in salida:
+				puntajes = deteccion[5:]
+				idclase = np.argmax(puntajes)
+				conf = puntajes[idclase]
+				if conf > confianza and idclase == 0:
+					caja = deteccion[0:4] * np.array([ancho, alto, ancho, alto])
+					cx,cy,an,al=caja.astype('int')
+					#obetener punto superior izquierdo de la caja que servirá para graficar el rectangulo
+					x = int(cx - an/2)
+					y = int(cy - al/2)
 
-        return cajas, lista_confianza, ids_clases
+					#se añaden a la lista de cajas
+					cajas.append([x,y,int(an),int(al)])
 
+					#se añade a la lista de confianzas
+					confianzas.append(float(conf))
+		idxs = cv2.dnn.NMSBoxes(cajas, confianzas, confianza, umbral) #devuelve los indices de las mejores predicciones
+		return idxs,cajas,confianzas
 
-    def dibujar_cajas(self,imagen, cajas, lista_confianza, ids_clases, idxs, color,contador):
-        resultados = []
-        infractores = set()
-        dist_promedio = 0.0
-        contador += 1
-        if len(idxs) > 0:
-            for i in idxs.flatten():
-                # extraer las coordenadas de las cajas
-                x, y = cajas[i][0], cajas[i][1]
-                ancho, alto = cajas[i][2], cajas[i][3]
-                #posición de los pies
-                cx = x + (ancho/2)
-                cy = y + (alto)
-                # bloque añadido
-                r = (lista_confianza[i], (x, y, x + ancho, y + alto), (cx,cy))
-                resultados.append(r)
-                if len(resultados) >= 2:
-                    centroides = np.array([r[2] for r in resultados])
-                    D = distance.cdist(centroides,centroides, metric='euclidean')
-                    for i in range(0, D.shape[0]-1):
-                        for j in range(i + 1, D.shape[1]):
-                            if D[i,j] < 270 :
-                                infractores.add(i)
-                                infractores.add(j)
-                                dist_promedio += D[i][j]
-                                contador = 0
-                for (i, ( _, bbox, centroid)) in enumerate(resultados):
-                    (x, y, x2, y2) = bbox
-                    #(cX, cY) = centroid
-                    if i in infractores:
-                        color = (0,0,255)
-                    else:
-                        color = (0,255,0)
-                    #fin bloque añadido
+	def inicio(self):
+		#definir variables
+		red = cv2.dnn.readNetFromDarknet('model/yolov3.cfg','model/yolov3.weights') #cargamos la red
+		
 
-                    #if etiquetas[ids_clases[i]] == 'person':
-                    # dibujar la caja que enmarca a cada persona con su respectivo nivel de confianza
-                    #color = [int(c) for c in colors[classIDs[i]]]
-                    cv2.rectangle(imagen, (x, y), (x2,y2), color, 2)
-                    texto = "{}: {:.1f}%".format('Persona', lista_confianza[i]*100)
-                    cv2.putText(imagen, texto, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-            cv2.putText(imagen, "Personas: {0}".format(len(resultados)), (20, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,0,0), 2)
-            cv2.putText(imagen, "Incumplidas: {0}".format(len(infractores)), (20, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 2)
-            cv2.putText(imagen, "Cumplidas: {0}".format(len(resultados)-len(infractores)), (20, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 2)        
-            if len(infractores) != 0:
-                dist_promedio = dist_promedio / len(infractores)
-        return imagen,len(resultados),len(infractores),dist_promedio, contador
+		#verificamos si existe GPU conectada
+		indiceGPU = cv2.cuda.getDevice()#se obtiene el indice 0 o mayor si existe, si no existe devuelve -1
 
+		if indiceGPU >= 0:
+			red.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)	#activar funciones cumputacionales de CUDA
+			red.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
+			print('use CUDA')
 
-    def prediccion(self,red, nombres_etiquetas, imagen, confianza, umbral):
-        alto, ancho = imagen.shape[:2]
-        
-        # crear blob desde la imagen
-        blob = cv2.dnn.blobFromImage(imagen, 1 / 255.0, (320, 320), swapRB=True, crop=False)
-        red.setInput(blob)
-        salidas = red.forward(nombres_etiquetas)
+		numeroDeCapas = red.getLayerNames() #obtiene las capas de deteccion a 3 escalas
+		capasRedimension =[numeroDeCapas[i[0]-1] for i in red.getUnconnectedOutLayers()]
 
-        # extraer elementos
-        cajas, confianzas, idsclases = self.extraer_cajas_confianzas_idsclases(salidas, confianza, ancho, alto)
+		#iniciar captura de video
+		video = cv2.VideoCapture(0)
+		video.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+		video.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+		return video, red, capasRedimension
 
-        # aplicar umbral
-        idxs = cv2.dnn.NMSBoxes(cajas, confianzas, confianza, umbral)
+	def run(self):
+		confianza = 0.5
+		umbral = 0.4
+		contador = 0 
 
-        return cajas, confianzas, idsclases, idxs
+		#variables temporales
+		temp_personas = 0
+		temp_incumplidas = 0
+		temp_dist_promedio = 0.0
+		contador = 0
+		guardar = False
 
+		video,red,capasRedimension = self.inicio()
+		#renderizar video en fotogramas
+		while video.isOpened():
+			_,fotograma = video.read()
+			idxs,cajas,confianzas = self.deteccion(fotograma,red,capasRedimension,confianza,umbral)
+			fotograma,_personas,_infractores,_dist_promedio,contador = self.dibujarcajas(idxs,cajas,confianzas,fotograma,contador)
 
-    def run(self):
+			#enviar la señal a la aplicación con la imagen como argumento
+			imagen = cv2.cvtColor(fotograma, cv2.COLOR_BGR2RGB)
+			imagen = cv2.flip(imagen,1)
+			imagenaplanada= cv2.flip(imagen,1)
+			qtImagen= QImage(imagenaplanada.data, imagenaplanada.shape[1], imagenaplanada.shape[0], QImage.Format_RGB888)
+			img= qtImagen.scaled(1280,720,Qt.KeepAspectRatio)
+			self.imagenfinal.emit(img)
+			
+			"""
+			condicional que permite actualizar los datos temporales antes de guardar los registros
+			mientras existan detecciones no se emite la señal para guardar en BD
+			debe pasar 15 fotogramas para emitir la señal
+			se renderiza a 5fps 
 
-            
-        #cargar etiquetas
-        etiquetas = open('../model/coco.names').read().strip().split('\n')
-
-        #color verde por defecto para las personas
-        color = (0,255,0)
-
-        #cargar pesos y configuración de YOLOv3
-        red = cv2.dnn.readNetFromDarknet('../model/yolov3.cfg','../model/yolov3.weights')
-
-        #comprobar GPU
-        indice_gpu = cv2.cuda.getDevice()
-        if indice_gpu >= 0:
-            red.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
-            red.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
-            #imprimir información de GPU
-            cv2.cuda.printCudaDeviceInfo(indice_gpu)
-            
-        # Obtener etiquetas de la red
-        n_etiquetas = red.getLayerNames()
-        nombres_etiquetas = [n_etiquetas[i[0] - 1] for i in red.getUnconnectedOutLayers()]
-
-        #indicamos nivel de confianza
-        confianza = 0.5
-
-        #indicamos el nivel de umbral
-        umbral = 0.2
-        
-
-        #inicializamos video
-        video = cv2.VideoCapture(1)
-        
-        
-        #redimiensionamos video
-        video.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-        video.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-
-        #variables temporales
-        temp_personas = 0
-        temp_incumplidas = 0
-        temp_dist_promedio = 0.0
-        contador = 0
-        guardar = False
-
-        #iniciar renderizado de video
-        while video.isOpened():
-            _, imagen = video.read()
-
-            cajas, confianzas, idclases, idxs = self.prediccion(red, nombres_etiquetas, imagen, confianza, umbral)
-
-            imagen, _personas,_infractores,_dist_promedio,contador = self.dibujar_cajas(imagen, cajas, confianzas, idclases, idxs, color,contador)
-            imagen = cv2.cvtColor(imagen, cv2.COLOR_BGR2RGB)
-            imagen = cv2.flip(imagen,1)
-            imagenaplanada= cv2.flip(imagen,1)
-            qtImagen= QImage(imagenaplanada.data, imagenaplanada.shape[1], imagenaplanada.shape[0], QImage.Format_RGB888)
-            img= qtImagen.scaled(1280,720,Qt.KeepAspectRatio)
-            self.imagenfinal.emit(img)
-
-            if _infractores > temp_incumplidas:
-                temp_personas = _personas
-                temp_incumplidas = _infractores
-                temp_dist_promedio = _dist_promedio
-                fecha = str(datetime.now())
-                guardar = True
-            if contador == 15 and guardar:
-                #print(temp_personas,temp_incumplidas,temp_dist_promedio,fecha)
-                self.datosguardar.emit(temp_personas,temp_incumplidas,temp_dist_promedio,fecha)
-                
-                contador = 0
-                temp_dist_promedio = 0.0
-                temp_incumplidas = 0
-                temp_personas = 0
-                guardar = False
-                
-
-
-            """cv2.imshow('Deteccion de personas con YOLOv3', imagen)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break"""
-        
-
+			guarda la mayor cantidad de infractores posibles y no cada vez que aparezce uno
+			"""
+			if _infractores > temp_incumplidas:
+				temp_personas = _personas
+				temp_incumplidas = _infractores
+				temp_dist_promedio = _dist_promedio
+				fecha = str(datetime.now())
+				guardar = True
+			if contador == 15 and guardar:
+				#print(temp_personas,temp_incumplidas,temp_dist_promedio,fecha)
+				self.datosguardar.emit(temp_personas,temp_incumplidas,temp_dist_promedio,fecha)
+				
+				contador = 0
+				temp_dist_promedio = 0.0
+				temp_incumplidas = 0
+				temp_personas = 0
+				guardar = False
+				
 

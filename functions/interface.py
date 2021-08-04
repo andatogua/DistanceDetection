@@ -10,7 +10,7 @@ from datetime import datetime,date
 
 from .distance_detection_class import videoStreaming
 from .canvas import MplCanvas
-from db.db import guardar, datosdia,ultimadetdia
+from db.db import guardar, datosdia,ultimadetdia, totaldetinf
 
 class TimerMessageBox(QMessageBox):
     def __init__(self, timeout=3, parent=None):
@@ -42,8 +42,8 @@ class MainWindow (QMainWindow):
         path_ui = os.path.join(self.path,r"functions\interface.ui")
         uic.loadUi(path_ui,self)
 
-        available_cameras = QCameraInfo.availableCameras()
-        self.statusBar().showMessage(available_cameras[1].description())
+        #available_cameras = QCameraInfo.availableCameras()
+        #self.statusBar().showMessage(available_cameras[1].description())
 
         self.videoStreaming= videoStreaming()
         self.videoStreaming.imagenfinal.connect(self.cargarvideo)
@@ -64,6 +64,10 @@ class MainWindow (QMainWindow):
         self.gridLayout.addWidget(self.grafica_uno)
         self.gridLayout_2.addWidget(self.grafica_dos)
 
+        totalInf, totalDet = totaldetinf()
+
+        self.lblTotalDet.setText(str(totalDet))
+        self.lblTotalInf.setText(str(totalInf))
         self.cargarreporte()
 
     def mostrarmensaje(self):
@@ -84,7 +88,8 @@ class MainWindow (QMainWindow):
         dia = self.dateEdit.date().toString('yyyy-MM-dd')
         ultimadeteccion = ultimadetdia(dia)
         diacompleto = datosdia(dia)
-            
+
+        
 
         self.grafica_uno.axes.clear()
         self.ax.clear()
@@ -116,14 +121,23 @@ class MainWindow (QMainWindow):
             self.grafica_uno.axes.set_xlabel('Hora del día')
             self.grafica_uno.axes.set_xticks(x1)
             self.grafica_uno.axes.set_xticklabels(x,size='xx-small')
+            self.grafica_uno.axes.yaxis.label.set_color('blue')
+            self.dist_prom_lbl.setText("{0:.1f} cm".format(prom))
+            self.porc_lbl.setText("{0:.1f} %".format(cump))
 
+            """
             color = 'tab:red'
             p2 = self.ax.bar(x1+0.15,d_prom,0.3,label='Distancia Prom',color=color)
             self.ax.set_ylabel('Distancia (cm)')
+            self.ax.yaxis.label.set_color('red')
             lines = [p1,p2]
             self.grafica_uno.axes.legend(lines, [l.get_label() for l in lines])
-            self.dist_prom_lbl.setText("{0:.1f} cm".format(prom))
-            self.porc_lbl.setText("{0:.1f} %".format(cump))
+
+            """
+            self.ax.plot(x1,d_prom,label='Distancia (cm)',color='red')
+            self.ax.set_ylabel('Distancia (cm)')
+            self.ax.yaxis.label.set_color('red')
+            
 
             x2 = np.arange(len(x))
             self.grafica_dos.axes.bar(x2,porc_cumpl,0.3,label='Total C',color='tab:green')
