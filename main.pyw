@@ -5,7 +5,7 @@ from db.db import crearConexion
 
 import sys
 
-from camlist import checkCam
+from functions.camlist import checkCam
 
 def main():
     available,_ = checkCam()

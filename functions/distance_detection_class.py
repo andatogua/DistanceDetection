@@ -11,10 +11,12 @@ import os
 
 from scipy.spatial import distance
 from datetime import datetime
+from .timerMessage import TimerMessageBox
 
 class videoStreaming(QThread):
 	imagenfinal=pyqtSignal(QImage)
 	datosguardar=pyqtSignal(int,int,float,str)
+	error = pyqtSignal(bool)
 
 	def dibujarcajas(self,idxs,cajas,confianzas,fotograma,contador):
 
@@ -36,7 +38,7 @@ class videoStreaming(QThread):
 				#método para leer sólo la mitad de la matriz cuadrada
 				for i in range(0,D.shape[0]-1):
 					for j in range(i+1,D.shape[1]):
-						if D[i,j] < 150: #370 es un valor referencia
+						if D[i,j] < 300: #370 es un valor referencia
 							infractores.add(i)
 							infractores.add(j)
 							sumaDistanciaPromedio += D[i,j]
@@ -124,44 +126,51 @@ class videoStreaming(QThread):
 		temp_dist_promedio = 0.0
 		contador = 0
 		guardar = False
+		av = True
 
 		video,red,capasRedimension = self.inicio()
 		#renderizar video en fotogramas
 		while video.isOpened():
-			_,fotograma = video.read()
-			idxs,cajas,confianzas = self.deteccion(fotograma,red,capasRedimension,confianza,umbral)
-			fotograma,_personas,_infractores,_dist_promedio,contador = self.dibujarcajas(idxs,cajas,confianzas,fotograma,contador)
-
-			#enviar la señal a la aplicación con la imagen como argumento
-			imagen = cv2.cvtColor(fotograma, cv2.COLOR_BGR2RGB)
-			imagen = cv2.flip(imagen,1)
-			imagenaplanada= cv2.flip(imagen,1)
-			qtImagen= QImage(imagenaplanada.data, imagenaplanada.shape[1], imagenaplanada.shape[0], QImage.Format_RGB888)
-			img= qtImagen.scaled(1280,720,Qt.KeepAspectRatio)
-			self.imagenfinal.emit(img)
-			
-			"""
-			condicional que permite actualizar los datos temporales antes de guardar los registros
-			mientras existan detecciones no se emite la señal para guardar en BD
-			debe pasar 15 fotogramas para emitir la señal
-			se renderiza a 5fps 
-
-			guarda la mayor cantidad de infractores posibles y no cada vez que aparezce uno
-			"""
-			if _infractores > temp_incumplidas:
-				temp_personas = _personas
-				temp_incumplidas = _infractores
-				temp_dist_promedio = _dist_promedio
-				fecha = str(datetime.now())
-				guardar = True
-			if contador == 15 and guardar:
-				#print(temp_personas,temp_incumplidas,temp_dist_promedio,fecha)
-				self.datosguardar.emit(temp_personas,temp_incumplidas,temp_dist_promedio,fecha)
+			available,fotograma = video.read()
+			try:
 				
-				contador = 0
-				temp_dist_promedio = 0.0
-				temp_incumplidas = 0
-				temp_personas = 0
-				guardar = False
+				idxs,cajas,confianzas = self.deteccion(fotograma,red,capasRedimension,confianza,umbral)
+				fotograma,_personas,_infractores,_dist_promedio,contador = self.dibujarcajas(idxs,cajas,confianzas,fotograma,contador)
+
+				#enviar la señal a la aplicación con la imagen como argumento
+				imagen = cv2.cvtColor(fotograma, cv2.COLOR_BGR2RGB)
+				imagen = cv2.flip(imagen,1)
+				imagenaplanada= cv2.flip(imagen,1)
+				qtImagen= QImage(imagenaplanada.data, imagenaplanada.shape[1], imagenaplanada.shape[0], QImage.Format_RGB888)
+				img= qtImagen.scaled(1280,720,Qt.KeepAspectRatio)
+				self.imagenfinal.emit(img)
+				
+				"""
+				condicional que permite actualizar los datos temporales antes de guardar los registros
+				mientras existan detecciones no se emite la señal para guardar en BD
+				debe pasar 15 fotogramas para emitir la señal
+				se renderiza a 5fps 
+
+				guarda la mayor cantidad de infractores posibles y no cada vez que aparezce uno
+				"""
+				if _infractores > temp_incumplidas:
+					temp_personas = _personas
+					temp_incumplidas = _infractores
+					temp_dist_promedio = _dist_promedio
+					fecha = str(datetime.now())
+					guardar = True
+				if contador == 15 and guardar:
+					#print(temp_personas,temp_incumplidas,temp_dist_promedio,fecha)
+					self.datosguardar.emit(temp_personas,temp_incumplidas,temp_dist_promedio,fecha)
+					
+					contador = 0
+					temp_dist_promedio = 0.0
+					temp_incumplidas = 0
+					temp_personas = 0
+					guardar = False
+			except:
+				self.error.emit(True)
+				break
+			
 				
 
