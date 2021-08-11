@@ -1,0 +1,5 @@
+matplotlib==3.3.4
+numpy==1.20.1
+PyQt5==2.4.7
+pyqt5-tools
+scipy==1.6.1
