@@ -2,6 +2,7 @@
 
 Para le ejecución de este proyecto es necesario la vinculación de OpenCV y CUDA
 Luego realice los siguientes pasos:
+
     1. Descargar este repositorio y pegarlo en el disco C.
 
     2. Abra una consola, ingrese al directorio raíz y ejecute el comando
